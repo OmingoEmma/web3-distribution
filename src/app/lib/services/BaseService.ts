@@ -1,25 +1,24 @@
 import { ethers } from 'ethers';
+import { ErrorHandler } from './ErrorHandler';
+import { ServiceError } from './types';
 
-class ErrorHandler {
-  handle(error: any, context?: string): Error {
-    const message = context
-      ? `${context}: ${error?.message ?? String(error)}`
-      : (error?.message ?? String(error));
-    return new Error(message);
+declare global {
+  interface Window {
+    ethereum?: any;
   }
 }
 
 export abstract class BaseService {
   protected provider: ethers.BrowserProvider | null = null;
   protected signer: ethers.Signer | null = null;
-  protected errorHandler: ErrorHandler;
 
   constructor() {
-    this.errorHandler = new ErrorHandler();
-    this.initializeProvider();
+    if (typeof window !== 'undefined') {
+      this.initializeProvider();
+    }
   }
 
-  protected async initializeProvider(): Promise<void> {
+  protected initializeProvider(): void {
     if (typeof window !== 'undefined' && window.ethereum) {
       this.provider = new ethers.BrowserProvider(window.ethereum);
     }
@@ -27,24 +26,45 @@ export abstract class BaseService {
 
   protected async getSigner(): Promise<ethers.Signer> {
     if (!this.provider) {
-      throw new Error('Provider not initialized');
+      ErrorHandler.throwError(new Error('Provider not initialized'), 'getSigner');
     }
-    if (!this.signer) {
-      this.signer = await this.provider.getSigner();
+    
+    try {
+      this.signer = await this.provider!.getSigner();
+      return this.signer;
+    } catch (error) {
+      ErrorHandler.throwError(error, 'Failed to get signer');
     }
-    return this.signer;
   }
 
   protected async ensureConnection(): Promise<void> {
     if (!this.provider) {
-      await this.initializeProvider();
+      this.initializeProvider();
     }
+    
+    if (!this.provider) {
+      ErrorHandler.throwError(
+        new Error('WALLET_NOT_FOUND'),
+        'Wallet connection required'
+      );
+    }
+
     if (!this.signer) {
       await this.getSigner();
     }
   }
 
-  protected handleError(error: any, context: string): never {
-    throw this.errorHandler.handle(error, context);
+  protected handleError(error: any, context: string): ServiceError {
+    return ErrorHandler.handle(error, context);
+  }
+
+  protected async getNetwork(): Promise<ethers.Network> {
+    await this.ensureConnection();
+    return await this.provider!.getNetwork();
+  }
+
+  protected async getBlockNumber(): Promise<number> {
+    await this.ensureConnection();
+    return await this.provider!.getBlockNumber();
   }
 }

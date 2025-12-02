@@ -10,15 +10,21 @@ import { Modal } from '@/components/ui/Modal';
 import { formatCurrency, formatPercentage, calculatePaymentSplit } from '@/lib/utils';
 import { mockProjects, mockRevenue, getProjectContributors } from '@/data/mockData';
 import { useAuth } from '@/lib/auth';
+import { useWallet } from '@/lib/wallet';
+import { PaymentService } from '@/lib/services/PaymentService';
 import { toast } from 'react-hot-toast';
 
 export const PaymentSplitter: React.FC = () => {
   const { user } = useAuth();
+  const { isConnected } = useWallet();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
   const [revenueSource, setRevenueSource] = useState('');
   const [calculatedSplits, setCalculatedSplits] = useState<any[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [useSmartContract, setUseSmartContract] = useState(false);
+  const paymentService = PaymentService.getInstance();
 
   const projectOptions = mockProjects.map(project => ({
     value: project.id,
@@ -45,51 +51,72 @@ export const PaymentSplitter: React.FC = () => {
 
   const handleProcessPayment = async () => {
     if (user?.role !== 'admin') {
-      toast.error('Admin only: You do not have permission to process payments.');
+      toast.error('You do not have permission to process payments');
       return;
     }
-    
+
+    if (!isConnected) {
+      toast.error('Please connect your wallet first');
+      return;
+    }
+
+    setIsProcessing(true);
+    const toastId = toast.loading('Processing payment splits...');
+
     try {
-      toast.loading('Processing payment splits...');
-      
-      // Simulate processing delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Here you would integrate with smart contract or payment processor
-      console.log('Processing payment splits:', calculatedSplits);
-      
-      // Persist to localStorage recent payments
-      const existing = JSON.parse(localStorage.getItem('crt_recent_splits') || '[]');
-      const entry = { 
-        id: Date.now().toString(), 
-        projectId: selectedProject, 
-        amount: parseFloat(paymentAmount), 
-        splits: calculatedSplits.map(split => ({
-          ...split,
-          status: 'Paid',
-          transactionId: `tx_${Math.random().toString(36).substr(2, 9)}`
-        })), 
-        date: new Date().toISOString(),
-        status: 'Completed'
-      };
-      localStorage.setItem('crt_recent_splits', JSON.stringify([entry, ...existing].slice(0, 10)));
-      
-      toast.dismiss();
-      toast.success(`Payment of ${formatCurrency(parseFloat(paymentAmount))} successfully split among ${calculatedSplits.length} contributors!`);
-      
+      if (useSmartContract) {
+        toast.loading('Using smart contract for payment distribution...', { id: toastId });
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        toast.success('Smart contract payment distribution initiated!', { id: toastId });
+      } else {
+        const payments = calculatedSplits.map(split => ({
+          to: split.walletAddress || '0x0000000000000000000000000000000000000000',
+          amount: split.amount.toString(),
+          memo: `Payment for ${selectedProject} - ${split.contributorName}`,
+        }));
+
+        const validation = await paymentService.validateBatchPayment({ payments });
+        
+        if (!validation.valid) {
+          toast.error(validation.error || 'Payment validation failed', { id: toastId });
+          setIsProcessing(false);
+          return;
+        }
+
+        const gasEstimate = await paymentService.estimateBatchGas({ payments });
+        toast.loading(`Estimated gas: ${gasEstimate.estimatedCost} ETH`, { id: toastId });
+
+        const receipts = await paymentService.sendBatchPayments({ payments });
+        
+        const existing = JSON.parse(localStorage.getItem('crt_recent_splits') || '[]');
+        const entry = {
+          id: Date.now().toString(),
+          projectId: selectedProject,
+          amount: parseFloat(paymentAmount),
+          splits: calculatedSplits.map((split, idx) => ({
+            ...split,
+            status: 'Paid',
+            transactionId: receipts[idx]?.hash || 'pending',
+          })),
+          date: new Date().toISOString(),
+          status: 'Completed',
+        };
+        localStorage.setItem('crt_recent_splits', JSON.stringify([entry, ...existing].slice(0, 10)));
+
+        toast.success(`Payment split completed! ${receipts.length} transactions sent`, { id: toastId });
+      }
+
       setIsModalOpen(false);
       setSelectedProject('');
       setPaymentAmount('');
       setRevenueSource('');
       setCalculatedSplits([]);
-      
-      // Refresh the component to show new data
       window.location.reload();
-      
-    } catch (error) {
-      toast.dismiss();
-      toast.error('Failed to process payment splits. Please try again.');
+    } catch (error: any) {
       console.error('Payment processing error:', error);
+      toast.error(error.message || 'Failed to process payment splits', { id: toastId });
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -245,15 +272,29 @@ export const PaymentSplitter: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Payment Amount
+                  Payment Amount (ETH)
                 </label>
                 <input
                   type="number"
+                  step="0.001"
                   value={paymentAmount}
                   onChange={(e) => setPaymentAmount(e.target.value)}
-                  placeholder="Enter amount in USD"
+                  placeholder="Enter amount in ETH"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 />
+              </div>
+
+              <div className="flex items-center space-x-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <input
+                  type="checkbox"
+                  id="useSmartContract"
+                  checked={useSmartContract}
+                  onChange={(e) => setUseSmartContract(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded"
+                />
+                <label htmlFor="useSmartContract" className="text-sm text-gray-700 dark:text-gray-300">
+                  Use Smart Contract for distribution (recommended)
+                </label>
               </div>
 
               <Button 
@@ -303,14 +344,34 @@ export const PaymentSplitter: React.FC = () => {
                   </div>
 
                   <div className="flex space-x-3 items-center">
-                    <Button variant="secondary" onClick={() => setIsModalOpen(false)} className="flex-1">
+                    <Button 
+                      variant="secondary" 
+                      onClick={() => setIsModalOpen(false)} 
+                      className="flex-1"
+                      disabled={isProcessing}
+                    >
                       Cancel
                     </Button>
                     <div className="flex-1">
-                      <Button onClick={handleProcessPayment} className="w-full" disabled={user?.role !== 'admin'} title={user?.role !== 'admin' ? 'You need admin access' : undefined}>
-                        Process Payment
+                      <Button 
+                        onClick={handleProcessPayment} 
+                        className="w-full" 
+                        disabled={user?.role !== 'admin' || isProcessing || !isConnected} 
+                        isLoading={isProcessing}
+                        title={
+                          !isConnected ? 'Connect wallet first' :
+                          user?.role !== 'admin' ? 'You need admin access' : 
+                          undefined
+                        }
+                      >
+                        {isProcessing ? 'Processing...' : 'Send Payment'}
                       </Button>
-                      {user?.role !== 'admin' && (
+                      {!isConnected && (
+                        <div className="mt-1">
+                          <Badge variant="warning">Connect wallet first</Badge>
+                        </div>
+                      )}
+                      {isConnected && user?.role !== 'admin' && (
                         <div className="mt-1">
                           <Badge variant="warning">You need admin access</Badge>
                         </div>

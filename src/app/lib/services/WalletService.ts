@@ -1,0 +1,191 @@
+import { ethers } from 'ethers';
+import { BaseService } from './BaseService';
+import { WalletInfo, NetworkConfig } from './types';
+import { ErrorHandler } from './ErrorHandler';
+
+export class WalletService extends BaseService {
+  private static instance: WalletService;
+
+  private constructor() {
+    super();
+  }
+
+  static getInstance(): WalletService {
+    if (!WalletService.instance) {
+      WalletService.instance = new WalletService();
+    }
+    return WalletService.instance;
+  }
+
+  async linkAccount(): Promise<WalletInfo> {
+    try {
+      if (typeof window === 'undefined' || !window.ethereum) {
+        ErrorHandler.throwError(
+          new Error('WALLET_NOT_FOUND'),
+          'MetaMask not detected'
+        );
+      }
+
+      const accounts = await window.ethereum.request({
+        method: 'eth_requestAccounts',
+      });
+
+      if (!accounts || accounts.length === 0) {
+        ErrorHandler.throwError(
+          new Error('WALLET_NOT_CONNECTED'),
+          'No accounts found'
+        );
+      }
+
+      return await this.getWalletInfo();
+    } catch (error) {
+      throw this.handleError(error, 'Failed to link account');
+    }
+  }
+
+  async getWalletInfo(): Promise<WalletInfo> {
+    try {
+      await this.ensureConnection();
+
+      const signer = await this.getSigner();
+      const address = await signer.getAddress();
+      const balance = await this.provider!.getBalance(address);
+      const network = await this.provider!.getNetwork();
+
+      return {
+        address,
+        balance: ethers.formatEther(balance),
+        chainId: Number(network.chainId),
+        networkName: this.getNetworkName(Number(network.chainId)),
+        isConnected: true,
+      };
+    } catch (error) {
+      throw this.handleError(error, 'Failed to get wallet info');
+    }
+  }
+
+  async ensureNetwork(requiredChainId: number): Promise<void> {
+    try {
+      const network = await this.getNetwork();
+      const currentChainId = Number(network.chainId);
+
+      if (currentChainId !== requiredChainId) {
+        await this.switchNetwork(requiredChainId);
+      }
+    } catch (error) {
+      throw this.handleError(error, 'Failed to ensure network');
+    }
+  }
+
+  async switchNetwork(chainId: number): Promise<void> {
+    try {
+      const hexChainId = `0x${chainId.toString(16)}`;
+      
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: hexChainId }],
+      });
+    } catch (error: any) {
+      if (error.code === 4902) {
+        const networkConfig = this.getNetworkConfig(chainId);
+        if (networkConfig) {
+          await this.addNetwork(networkConfig);
+        } else {
+          ErrorHandler.throwError(error, 'Network not supported');
+        }
+      } else {
+        throw this.handleError(error, 'Failed to switch network');
+      }
+    }
+  }
+
+  async addNetwork(config: NetworkConfig): Promise<void> {
+    try {
+      await window.ethereum.request({
+        method: 'wallet_addEthereumChain',
+        params: [config],
+      });
+    } catch (error) {
+      throw this.handleError(error, 'Failed to add network');
+    }
+  }
+
+  getNetworkName(chainId: number): string {
+    const networks: Record<number, string> = {
+      1: 'Ethereum Mainnet',
+      5: 'Goerli Testnet',
+      11155111: 'Sepolia Testnet',
+      137: 'Polygon Mainnet',
+      80001: 'Polygon Mumbai',
+      56: 'BSC Mainnet',
+      97: 'BSC Testnet',
+      43114: 'Avalanche C-Chain',
+      43113: 'Avalanche Fuji',
+    };
+
+    return networks[chainId] || `Unknown Network (${chainId})`;
+  }
+
+  getNetworkConfig(chainId: number): NetworkConfig | null {
+    const configs: Record<number, NetworkConfig> = {
+      1: {
+        chainId: '0x1',
+        chainName: 'Ethereum Mainnet',
+        rpcUrls: ['https://mainnet.infura.io/v3/'],
+        blockExplorerUrls: ['https://etherscan.io/'],
+        nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+      },
+      137: {
+        chainId: '0x89',
+        chainName: 'Polygon Mainnet',
+        rpcUrls: ['https://polygon-rpc.com/'],
+        blockExplorerUrls: ['https://polygonscan.com/'],
+        nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
+      },
+      80001: {
+        chainId: '0x13881',
+        chainName: 'Polygon Mumbai',
+        rpcUrls: ['https://rpc-mumbai.maticvigil.com/'],
+        blockExplorerUrls: ['https://mumbai.polygonscan.com/'],
+        nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
+      },
+      56: {
+        chainId: '0x38',
+        chainName: 'BSC Mainnet',
+        rpcUrls: ['https://bsc-dataseed.binance.org/'],
+        blockExplorerUrls: ['https://bscscan.com/'],
+        nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+      },
+      97: {
+        chainId: '0x61',
+        chainName: 'BSC Testnet',
+        rpcUrls: ['https://data-seed-prebsc-1-s1.binance.org:8545/'],
+        blockExplorerUrls: ['https://testnet.bscscan.com/'],
+        nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+      },
+    };
+
+    return configs[chainId] || null;
+  }
+
+  async isWalletInstalled(): Promise<boolean> {
+    return typeof window !== 'undefined' && !!window.ethereum;
+  }
+
+  async getAccounts(): Promise<string[]> {
+    try {
+      if (!window.ethereum) {
+        return [];
+      }
+
+      const accounts = await window.ethereum.request({
+        method: 'eth_accounts',
+      });
+
+      return accounts || [];
+    } catch (error) {
+      console.error('Failed to get accounts:', error);
+      return [];
+    }
+  }
+}
