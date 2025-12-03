@@ -48,11 +48,28 @@ export function middleware(request: NextRequest) {
     } catch {}
   }
 
+  // Protect /contributor for contributor and admin roles
+  if (pathname.startsWith('/contributor')) {
+    if (!userCookie) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/login';
+      return NextResponse.redirect(url);
+    }
+    try {
+      const user = JSON.parse(decodeURIComponent(userCookie.value));
+      if (user.role !== 'contributor' && user.role !== 'admin') {
+        const url = request.nextUrl.clone();
+        url.pathname = '/unauthorized';
+        return NextResponse.redirect(url);
+      }
+    } catch {}
+  }
+
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/admin/:path*', '/creator/:path*'],
+  matcher: ['/dashboard/:path*', '/admin/:path*', '/creator/:path*', '/contributor/:path*'],
 };
 
 
