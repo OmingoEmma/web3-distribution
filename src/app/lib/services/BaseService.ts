@@ -11,42 +11,65 @@ declare global {
 export abstract class BaseService {
   protected provider: ethers.BrowserProvider | null = null;
   protected signer: ethers.Signer | null = null;
+  private initializationPromise: Promise<void> | null = null;
 
   constructor() {
-    if (typeof window !== 'undefined') {
-      this.initializeProvider();
+    // Defer initialization to avoid race conditions
+    if (typeof window !== 'undefined' && window.ethereum) {
+      this.initializationPromise = this.initializeProvider();
     }
   }
 
-  protected initializeProvider(): void {
+  protected async initializeProvider(): Promise<void> {
+    if (this.provider) return; // Already initialized
+    
     if (typeof window !== 'undefined' && window.ethereum) {
-      this.provider = new ethers.BrowserProvider(window.ethereum);
+      try {
+        this.provider = new ethers.BrowserProvider(window.ethereum);
+        // Wait for provider to be ready
+        await this.provider.getNetwork().catch(() => {
+          // Network call failed, but provider is initialized
+        });
+      } catch (error) {
+        console.error('[BaseService] Provider initialization error:', error);
+        this.provider = null;
+      }
     }
   }
 
   protected async getSigner(): Promise<ethers.Signer> {
+    // Wait for initialization if in progress
+    if (this.initializationPromise) {
+      await this.initializationPromise;
+    }
+
     if (!this.provider) {
-      ErrorHandler.throwError(new Error('Provider not initialized'), 'getSigner');
+      throw new Error('Provider not initialized. Please connect your wallet.');
     }
     
     try {
-      this.signer = await this.provider!.getSigner();
+      if (!this.signer) {
+        this.signer = await this.provider.getSigner();
+      }
       return this.signer;
-    } catch (error) {
-      ErrorHandler.throwError(error, 'Failed to get signer');
+    } catch (error: any) {
+      console.error('[BaseService] getSigner error:', error);
+      throw new Error(error.message || 'Failed to get signer. Please unlock your wallet.');
     }
   }
 
   protected async ensureConnection(): Promise<void> {
+    // Wait for initialization if in progress
+    if (this.initializationPromise) {
+      await this.initializationPromise;
+    }
+
     if (!this.provider) {
-      this.initializeProvider();
+      await this.initializeProvider();
     }
     
     if (!this.provider) {
-      ErrorHandler.throwError(
-        new Error('WALLET_NOT_FOUND'),
-        'Wallet connection required'
-      );
+      throw new Error('Wallet connection required. Please install MetaMask or another Web3 wallet.');
     }
 
     if (!this.signer) {

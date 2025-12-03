@@ -30,16 +30,23 @@ export default function CreatorDashboardPage() {
       fetch('/api/rights').then(r => r.json()),
     ])
       .then(([projectsData, revenueData, rightsData]) => {
-        // Filter data for current user
-        const userProjects = projectsData.filter((p: Project) =>
-          p.contributors.some(c => c.email === user.email)
+        // Filter data for creator - only show projects they created/own
+        const creatorProjects = projectsData.filter((p: Project) => p.creatorId === user.id);
+        
+        // Get project IDs for this creator
+        const creatorProjectIds = creatorProjects.map((p: Project) => p.id);
+        
+        // Only show revenue from creator's own projects
+        const creatorRevenue = revenueData.filter((r: Revenue) => 
+          creatorProjectIds.includes(r.projectId)
         );
-        const userRevenue = revenueData.filter((r: Revenue) => r.contributorId === user.id);
-        const userRights = rightsData.filter((r: CreativeRight) => r.ownerId === user.id);
+        
+        // Only show rights owned by this creator
+        const creatorRights = rightsData.filter((r: CreativeRight) => r.ownerId === user.id);
 
-        setProjects(userProjects);
-        setRevenue(userRevenue);
-        setRights(userRights);
+        setProjects(creatorProjects);
+        setRevenue(creatorRevenue);
+        setRights(creatorRights);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -63,7 +70,7 @@ export default function CreatorDashboardPage() {
             Welcome back, {user.name}!
           </h2>
           <p className="text-gray-600 dark:text-gray-400">
-            Here's an overview of your creative work and earnings.
+            Here's an overview of your projects and earnings.
           </p>
         </div>
 
@@ -72,7 +79,7 @@ export default function CreatorDashboardPage() {
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Earnings</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">My Total Revenue</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
                   ${totalEarnings.toLocaleString()}
                 </p>
@@ -96,7 +103,7 @@ export default function CreatorDashboardPage() {
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Active Projects</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">My Active Projects</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
                   {activeProjects}
                 </p>
@@ -108,7 +115,7 @@ export default function CreatorDashboardPage() {
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Active Rights</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">My Active Rights</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
                   {activeRights}
                 </p>
@@ -118,10 +125,10 @@ export default function CreatorDashboardPage() {
           </div>
         </div>
 
-        {/* Recent Projects */}
+        {/* My Projects */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Recent Projects
+            My Projects
           </h3>
           {loading ? (
             <p className="text-gray-600 dark:text-gray-400">Loading...</p>
@@ -156,10 +163,10 @@ export default function CreatorDashboardPage() {
           )}
         </div>
 
-        {/* Recent Revenue */}
+        {/* My Recent Revenue */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Recent Revenue
+            My Recent Revenue
           </h3>
           {loading ? (
             <p className="text-gray-600 dark:text-gray-400">Loading...</p>

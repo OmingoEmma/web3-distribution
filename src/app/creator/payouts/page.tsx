@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { CreatorLayout } from '@/components/layouts/CreatorLayout';
-import { Revenue } from '@/lib/types';
+import { Revenue, Project } from '@/lib/types';
 
 export default function CreatorPayoutsPage() {
   const { user } = useAuth();
@@ -22,11 +22,23 @@ export default function CreatorPayoutsPage() {
       return;
     }
 
-    fetch('/api/revenue')
-      .then(r => r.json())
-      .then((data: Revenue[]) => {
-        const userPayouts = data.filter(r => r.contributorId === user.id && r.status === 'Paid');
-        setPayouts(userPayouts);
+    // Fetch both projects and revenue to filter correctly
+    Promise.all([
+      fetch('/api/projects').then(r => r.json()),
+      fetch('/api/revenue').then(r => r.json()),
+    ])
+      .then(([projectsData, revenueData]) => {
+        // Get creator's project IDs
+        const creatorProjectIds = projectsData
+          .filter((p: any) => p.creatorId === user.id)
+          .map((p: any) => p.id);
+        
+        // Only show paid revenue from creator's projects
+        const creatorPayouts = revenueData.filter((r: Revenue) => 
+          creatorProjectIds.includes(r.projectId) && r.status === 'Paid'
+        );
+        
+        setPayouts(creatorPayouts);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -49,17 +61,17 @@ export default function CreatorPayoutsPage() {
         {/* Header */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-            Payouts
+            My Payouts
           </h2>
           <p className="text-gray-600 dark:text-gray-400">
-            View your completed payout history.
+            View completed payouts from your projects.
           </p>
         </div>
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-            <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Total Paid Out</p>
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Total Distributed</p>
             <p className="text-3xl font-bold text-green-600 dark:text-green-400">
               ${totalPaid.toLocaleString()}
             </p>
@@ -71,7 +83,7 @@ export default function CreatorPayoutsPage() {
             </p>
           </div>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-            <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Total Payouts</p>
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Total Transactions</p>
             <p className="text-3xl font-bold text-gray-900 dark:text-white">
               {payouts.length}
             </p>

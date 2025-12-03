@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { CreatorLayout } from '@/components/layouts/CreatorLayout';
-import { Revenue } from '@/lib/types';
+import { Revenue, Project } from '@/lib/types';
 
 export default function CreatorRevenuePage() {
   const { user } = useAuth();
@@ -23,11 +23,23 @@ export default function CreatorRevenuePage() {
       return;
     }
 
-    fetch('/api/revenue')
-      .then(r => r.json())
-      .then((data: Revenue[]) => {
-        const userRevenue = data.filter(r => r.contributorId === user.id);
-        setRevenue(userRevenue);
+    // Fetch both projects and revenue to filter correctly
+    Promise.all([
+      fetch('/api/projects').then(r => r.json()),
+      fetch('/api/revenue').then(r => r.json()),
+    ])
+      .then(([projectsData, revenueData]) => {
+        // Get creator's project IDs
+        const creatorProjectIds = projectsData
+          .filter((p: any) => p.creatorId === user.id)
+          .map((p: any) => p.id);
+        
+        // Only show revenue from creator's projects
+        const creatorRevenue = revenueData.filter((r: Revenue) => 
+          creatorProjectIds.includes(r.projectId)
+        );
+        
+        setRevenue(creatorRevenue);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -51,29 +63,29 @@ export default function CreatorRevenuePage() {
         {/* Header */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-            Revenue
+            My Revenue
           </h2>
           <p className="text-gray-600 dark:text-gray-400">
-            Track all your earnings and payment history.
+            Track revenue from all your projects.
           </p>
         </div>
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-            <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Total Earnings</p>
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Total Project Revenue</p>
             <p className="text-3xl font-bold text-gray-900 dark:text-white">
               ${totalEarnings.toLocaleString()}
             </p>
           </div>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-            <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Paid Out</p>
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Distributed</p>
             <p className="text-3xl font-bold text-green-600 dark:text-green-400">
               ${paidAmount.toLocaleString()}
             </p>
           </div>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-            <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Pending</p>
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Pending Distribution</p>
             <p className="text-3xl font-bold text-yellow-600 dark:text-yellow-400">
               ${pendingAmount.toLocaleString()}
             </p>

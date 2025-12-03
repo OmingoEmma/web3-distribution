@@ -102,10 +102,54 @@ await contractService.distributeRevenue(contractAddress, abi, projectId, amount)
 - **Exchange Rate Estimates**: Real-time conversion calculations with fee transparency
 
 ### 🎯 **Role-Based Access Control**
-- **Middleware Protection**: Route-level access control in Next.js 14
-- **Admin Features**: Platform analytics, user management, contract deployment
-- **Creator Features**: Personal earnings, withdrawal requests, project management
-- **Unauthorized Handling**: Graceful redirects with user feedback
+
+The platform supports three distinct roles with separate dashboards and permissions:
+
+#### **Admin Role** (`/admin/*`)
+- **Access**: Platform-wide view of all data
+- **Features**:
+  - View ALL projects, creators, and contributors
+  - Platform-wide revenue statistics
+  - User management and role assignment
+  - Smart contract deployment controls
+  - Revenue distribution mode (Mock/Testnet/Production)
+  - PaymentSplitter for batch distributions
+- **Test Account**: `admin@risidio.com`
+
+#### **Creator Role** (`/creator/*`)
+- **Access**: Project owner view (only projects they created)
+- **Features**:
+  - View projects where `creatorId === user.id`
+  - Manage contributors on their projects
+  - Track revenue from their projects
+  - Distribute payments to contributors
+  - Fiat on-ramp (Top Up) and off-ramp (Withdraw)
+  - Rights management for owned projects
+- **Test Accounts**: 
+  - `alex.rodriguez@email.com` (owns Neon Dreams project)
+  - `sarah.kim@email.com` (owns Sustainable Brand project)
+
+#### **Contributor Role** (`/contributor/*`)
+- **Access**: Personal earnings view only
+- **Features**:
+  - View projects they contribute to
+  - Track personal earnings and revenue share
+  - View payout history
+  - Manage wallet settings
+  - NO access to project management or admin tools
+- **Test Accounts**:
+  - `maya.chen@email.com`
+  - `david.park@email.com`
+
+#### **Route Protection**
+```
+/admin/*       → Admin only
+/creator/*     → Creator + Admin
+/contributor/* → Contributor + Admin
+/dashboard     → Redirects by role (no UI)
+```
+
+**Middleware**: Enforces role-based access with automatic redirects to `/unauthorized` for invalid access attempts.
 
 ### 📊 **Analytics & Reporting**
 - **Revenue Trends**: Monthly charts with Chart.js/Recharts
@@ -206,7 +250,35 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000)
 
-### 5️⃣ Get Testnet Tokens
+### 5️⃣ Test with Demo Accounts
+
+**Admin Dashboard** (`/admin/dashboard`):
+```
+Email: admin@risidio.com
+Access: Full platform view, all projects, all users
+```
+
+**Creator Dashboard** (`/creator/dashboard`):
+```
+Email: alex.rodriguez@email.com
+Access: Neon Dreams Music Video project only
+
+Email: sarah.kim@email.com
+Access: Sustainable Brand Identity project only
+```
+
+**Contributor Dashboard** (`/contributor/dashboard`):
+```
+Email: maya.chen@email.com
+Access: Personal earnings from contributed projects
+
+Email: david.park@email.com
+Access: Personal earnings from contributed projects
+```
+
+**Note**: The `/dashboard` route automatically redirects to the appropriate dashboard based on user role.
+
+### 6️⃣ Get Testnet Tokens
 - Visit [Polygon Faucet](https://faucet.polygon.technology/)
 - Connect wallet
 - Request testnet MATIC

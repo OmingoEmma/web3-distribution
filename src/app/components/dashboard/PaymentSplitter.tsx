@@ -65,7 +65,10 @@ export const PaymentSplitter: React.FC = () => {
 
     try {
       if (useSmartContract) {
+        // Smart contract integration - requires deployed contract address
+        // Set NEXT_PUBLIC_USE_SMART_CONTRACT=true in .env.local when ready
         toast.loading('Using smart contract for payment distribution...', { id: toastId });
+        // TODO: Replace with actual ContractService.distributeRevenue() call
         await new Promise(resolve => setTimeout(resolve, 2000));
         toast.success('Smart contract payment distribution initiated!', { id: toastId });
       } else {

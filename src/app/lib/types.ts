@@ -25,6 +25,7 @@ export interface Project {
   contractAddress?: string;
   coverImage: string;
   progress: number;
+  creatorId?: string; // ID of the user who created/owns this project
 }
 
 export interface Contributor {

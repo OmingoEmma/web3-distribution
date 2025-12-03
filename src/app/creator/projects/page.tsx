@@ -26,10 +26,9 @@ export default function CreatorProjectsPage() {
     fetch('/api/projects')
       .then(r => r.json())
       .then((data: Project[]) => {
-        const userProjects = data.filter(p =>
-          p.contributors.some(c => c.email === user.email)
-        );
-        setProjects(userProjects);
+        // Only show projects created/owned by this creator
+        const creatorProjects = data.filter(p => p.creatorId === user.id);
+        setProjects(creatorProjects);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -152,32 +151,28 @@ export default function CreatorProjectsPage() {
                           ${project.totalRevenue.toLocaleString()}
                         </span>
                       </div>
-                      {myContribution && (
-                        <>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600 dark:text-gray-400">My Share:</span>
-                            <span className="font-semibold text-gray-900 dark:text-white">
-                              {myContribution.revenueShare}%
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600 dark:text-gray-400">My Earnings:</span>
-                            <span className="font-semibold text-green-600 dark:text-green-400">
-                              ${myContribution.totalEarned.toLocaleString()}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600 dark:text-gray-400">My Role:</span>
-                            <span className="font-medium text-gray-900 dark:text-white">
-                              {myContribution.role}
-                            </span>
-                          </div>
-                        </>
-                      )}
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">Pending Payments:</span>
+                        <span className="font-semibold text-yellow-600 dark:text-yellow-400">
+                          ${project.pendingPayments.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">Contributors:</span>
+                        <span className="font-medium text-gray-900 dark:text-white">
+                          {project.contributors.length}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">Progress:</span>
+                        <span className="font-medium text-gray-900 dark:text-white">
+                          {project.progress}%
+                        </span>
+                      </div>
                     </div>
                     <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
                       <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {project.contributors.length} contributor{project.contributors.length !== 1 ? 's' : ''}
+                        Created {project.createdDate}
                       </p>
                     </div>
                   </div>

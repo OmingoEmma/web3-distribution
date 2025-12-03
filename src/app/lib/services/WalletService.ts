@@ -19,27 +19,31 @@ export class WalletService extends BaseService {
 
   async linkAccount(): Promise<WalletInfo> {
     try {
-      if (typeof window === 'undefined' || !window.ethereum) {
-        ErrorHandler.throwError(
-          new Error('WALLET_NOT_FOUND'),
-          'MetaMask not detected'
-        );
+      if (typeof window === 'undefined') {
+        throw new Error('Window is not defined. This function must be called in a browser environment.');
+      }
+
+      if (!window.ethereum) {
+        throw new Error('MetaMask or Web3 wallet not detected. Please install MetaMask to continue.');
       }
 
       const accounts = await window.ethereum.request({
         method: 'eth_requestAccounts',
+      }).catch((err: any) => {
+        if (err.code === 4001) {
+          throw new Error('User rejected the connection request.');
+        }
+        throw err;
       });
 
       if (!accounts || accounts.length === 0) {
-        ErrorHandler.throwError(
-          new Error('WALLET_NOT_CONNECTED'),
-          'No accounts found'
-        );
+        throw new Error('No accounts found. Please unlock your wallet and try again.');
       }
 
       return await this.getWalletInfo();
-    } catch (error) {
-      throw this.handleError(error, 'Failed to link account');
+    } catch (error: any) {
+      console.error('[WalletService] linkAccount error:', error);
+      throw this.handleError(error, error.message || 'Failed to link account');
     }
   }
 
@@ -79,23 +83,38 @@ export class WalletService extends BaseService {
 
   async switchNetwork(chainId: number): Promise<void> {
     try {
+      if (typeof window === 'undefined' || !window.ethereum) {
+        throw new Error('Wallet not available');
+      }
+
       const hexChainId = `0x${chainId.toString(16)}`;
       
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: hexChainId }],
+      }).catch(async (error: any) => {
+        // Network not added to wallet
+        if (error.code === 4902) {
+          const networkConfig = this.getNetworkConfig(chainId);
+          if (networkConfig) {
+            await this.addNetwork(networkConfig);
+            // Try switching again after adding
+            await window.ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: hexChainId }],
+            });
+          } else {
+            throw new Error(`Network ${chainId} is not supported`);
+          }
+        } else if (error.code === 4001) {
+          throw new Error('User rejected network switch request');
+        } else {
+          throw error;
+        }
       });
     } catch (error: any) {
-      if (error.code === 4902) {
-        const networkConfig = this.getNetworkConfig(chainId);
-        if (networkConfig) {
-          await this.addNetwork(networkConfig);
-        } else {
-          ErrorHandler.throwError(error, 'Network not supported');
-        }
-      } else {
-        throw this.handleError(error, 'Failed to switch network');
-      }
+      console.error('[WalletService] switchNetwork error:', error);
+      throw this.handleError(error, error.message || 'Failed to switch network');
     }
   }
 

@@ -50,7 +50,7 @@ export default function CreatorRightsPage() {
             My Rights
           </h2>
           <p className="text-gray-600 dark:text-gray-400">
-            Manage your creative rights and ownership.
+            Manage creative rights for your projects.
           </p>
         </div>
 
